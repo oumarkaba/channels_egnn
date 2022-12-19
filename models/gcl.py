@@ -151,7 +151,7 @@ class E_GCL(nn.Module):
           temp: Softmax temperature.
     """
 
-    def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0, nodes_att_dim=0, act_fn=nn.ReLU(), recurrent=True, coords_weight=1.0, attention=False, clamp=False, norm_diff=False, tanh=False):
+    def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0, nodes_att_dim=0, act_fn=nn.ReLU(), recurrent=True, coords_weight=1.0, attention=False, clamp=False, norm_diff=False, tanh=False, num_vectors_in=1, num_vectors_out=1, last_layer=False):
         super(E_GCL, self).__init__()
         input_edge = input_nf * 2
         self.coords_weight = coords_weight
@@ -159,11 +159,14 @@ class E_GCL(nn.Module):
         self.attention = attention
         self.norm_diff = norm_diff
         self.tanh = tanh
+        self.num_vectors_in = num_vectors_in
+        self.num_vectors_out = num_vectors_out
+        self.last_layer = last_layer
         edge_coords_nf = 1
 
 
         self.edge_mlp = nn.Sequential(
-            nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
+            nn.Linear(input_edge + num_vectors_in + edges_in_d, hidden_nf),
             act_fn,
             nn.Linear(hidden_nf, hidden_nf),
             act_fn)
@@ -173,7 +176,7 @@ class E_GCL(nn.Module):
             act_fn,
             nn.Linear(hidden_nf, output_nf))
 
-        layer = nn.Linear(hidden_nf, 1, bias=False)
+        layer = nn.Linear(hidden_nf, num_vectors_in * num_vectors_out, bias=False)
         torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
 
         self.clamp = clamp
@@ -219,12 +222,20 @@ class E_GCL(nn.Module):
             out = x + out
         return out, agg
 
-    def coord_model(self, coord, edge_index, coord_diff, edge_feat):
+    def coord_model(self, coord, edge_index, coord_diff, radial, edge_feat):
         row, col = edge_index
-        trans = coord_diff * self.coord_mlp(edge_feat)
+        coord_matrix = self.coord_mlp(edge_feat).view(-1, self.num_vectors_in, self.num_vectors_out)
+        if coord_diff.dim() == 2:
+            coord_diff = coord_diff.unsqueeze(2)
+            coord = coord.unsqueeze(2).repeat(1, 1, self.num_vectors_out)
+        # coord_diff = coord_diff / radial.unsqueeze(1)
+        trans = torch.einsum('bij,bci->bcj', coord_matrix, coord_diff)
         trans = torch.clamp(trans, min=-100, max=100) #This is never activated but just in case it case it explosed it may save the train
         agg = unsorted_segment_mean(trans, row, num_segments=coord.size(0))
-        coord += agg*self.coords_weight
+        if self.last_layer:
+            coord = coord.mean(dim=2, keepdim=True) + agg * self.coords_weight
+        else:
+            coord += agg * self.coords_weight
         return coord
 
 
@@ -237,6 +248,9 @@ class E_GCL(nn.Module):
             norm = torch.sqrt(radial) + 1
             coord_diff = coord_diff/(norm)
 
+        if radial.dim() == 3:
+            radial = radial.squeeze(1)
+
         return radial, coord_diff
 
     def forward(self, h, edge_index, coord, edge_attr=None, node_attr=None):
@@ -244,7 +258,7 @@ class E_GCL(nn.Module):
         radial, coord_diff = self.coord2radial(edge_index, coord)
 
         edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
-        coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
+        coord = self.coord_model(coord, edge_index, coord_diff, radial, edge_feat)
         h, agg = self.node_model(h, edge_index, edge_feat, node_attr)
         # coord = self.node_coord_model(h, coord)
         # x = self.node_model(x, edge_index, x[col], u, batch)  # GCN
@@ -261,30 +275,30 @@ class E_GCL_vel(E_GCL):
     """
 
 
-    def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0, nodes_att_dim=0, act_fn=nn.ReLU(), recurrent=True, coords_weight=1.0, attention=False, norm_diff=False, tanh=False):
-        E_GCL.__init__(self, input_nf, output_nf, hidden_nf, edges_in_d=edges_in_d, nodes_att_dim=nodes_att_dim, act_fn=act_fn, recurrent=recurrent, coords_weight=coords_weight, attention=attention, norm_diff=norm_diff, tanh=tanh)
+    def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0, nodes_att_dim=0, act_fn=nn.ReLU(), recurrent=True, coords_weight=1.0, attention=False, norm_diff=False, tanh=False, num_vectors_in=1, num_vectors_out=1, last_layer=False):
+        E_GCL.__init__(self, input_nf, output_nf, hidden_nf, edges_in_d=edges_in_d, nodes_att_dim=nodes_att_dim, act_fn=act_fn, recurrent=recurrent, coords_weight=coords_weight, attention=attention, norm_diff=norm_diff, tanh=tanh, num_vectors_in=num_vectors_in, num_vectors_out=num_vectors_out, last_layer=last_layer)
         self.norm_diff = norm_diff
         self.coord_mlp_vel = nn.Sequential(
             nn.Linear(input_nf, hidden_nf),
             act_fn,
-            nn.Linear(hidden_nf, 1))
+            nn.Linear(hidden_nf, num_vectors_in * num_vectors_out))
 
     def forward(self, h, edge_index, coord, vel, edge_attr=None, node_attr=None):
         row, col = edge_index
         radial, coord_diff = self.coord2radial(edge_index, coord)
 
         edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
-        coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
+        coord = self.coord_model(coord, edge_index, coord_diff, radial, edge_feat)
 
-
-        coord += self.coord_mlp_vel(h) * vel
+        coord_vel_matrix = self.coord_mlp_vel(h).view(-1, self.num_vectors_in, self.num_vectors_out)
+        if vel.dim() == 2:
+            vel = vel.unsqueeze(2)
+        coord += torch.einsum('bij,bci->bcj', coord_vel_matrix, vel)
         h, agg = self.node_model(h, edge_index, edge_feat, node_attr)
         # coord = self.node_coord_model(h, coord)
         # x = self.node_model(x, edge_index, x[col], u, batch)  # GCN
         return h, coord, edge_attr
-
-
-
+ 
 
 class GCL_rf_vel(nn.Module):
     """Graph Neural Net with global state and fixed number of nodes per graph.
@@ -342,8 +356,9 @@ def unsorted_segment_sum(data, segment_ids, num_segments):
 
 
 def unsorted_segment_mean(data, segment_ids, num_segments):
-    result_shape = (num_segments, data.size(1))
-    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
+    result_shape = (num_segments, data.size(1), data.size(2))
+    segment_ids = segment_ids.unsqueeze(-1).unsqueeze(-1)
+    segment_ids = segment_ids.expand(-1, data.size(1), data.size(2))
     result = data.new_full(result_shape, 0)  # Init empty result tensor.
     count = data.new_full(result_shape, 0)
     result.scatter_add_(0, segment_ids, data)

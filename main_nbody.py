@@ -28,6 +28,8 @@ parser.add_argument('--lr', type=float, default=5e-4, metavar='N',
                     help='learning rate')
 parser.add_argument('--nf', type=int, default=64, metavar='N',
                     help='learning rate')
+parser.add_argument('--num_vectors', type=int, default=1, metavar='N',
+                    help='number of vector channels')
 parser.add_argument('--model', type=str, default='egnn_vel', metavar='N',
                     help='available models: gnn, baseline, linear, linear_vel, se3_transformer, egnn_vel, rf_vel, tfn')
 parser.add_argument('--attention', type=int, default=0, metavar='N',
@@ -100,7 +102,7 @@ def main():
     if args.model == 'gnn':
         model = GNN(input_dim=6, hidden_nf=args.nf, n_layers=args.n_layers, device=device, recurrent=True)
     elif args.model == 'egnn_vel':
-        model = EGNN_vel(in_node_nf=1, in_edge_nf=2, hidden_nf=args.nf, device=device, n_layers=args.n_layers, recurrent=True, norm_diff=args.norm_diff, tanh=args.tanh)
+        model = EGNN_vel(in_node_nf=1, in_edge_nf=2, hidden_nf=args.nf, device=device, n_layers=args.n_layers, recurrent=True, norm_diff=args.norm_diff, tanh=args.tanh, num_vectors=args.num_vectors)
     elif args.model == 'baseline':
         model = Baseline()
     elif args.model == 'linear_vel':
