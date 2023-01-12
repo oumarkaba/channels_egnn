@@ -151,7 +151,10 @@ class E_GCL(nn.Module):
           temp: Softmax temperature.
     """
 
-    def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0, nodes_att_dim=0, act_fn=nn.ReLU(), recurrent=True, coords_weight=1.0, attention=False, clamp=False, norm_diff=False, tanh=False, num_vectors_in=1, num_vectors_out=1, last_layer=False):
+    def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
+                nodes_att_dim=0, act_fn=nn.ReLU(),recurrent=True, coords_weight=1.0,
+                attention=False, clamp=False, norm_diff=False, tanh=False,
+                num_vectors_in=1, num_vectors_out=1, last_layer=False):
         super(E_GCL, self).__init__()
         input_edge = input_nf * 2
         self.coords_weight = coords_weight
@@ -354,6 +357,13 @@ def unsorted_segment_sum(data, segment_ids, num_segments):
     result.scatter_add_(0, segment_ids, data)
     return result
 
+def unsorted_segment_sum_vec(data, segment_ids, num_segments):
+    result_shape = (num_segments, data.size(1), data.size(2))
+    segment_ids = segment_ids.unsqueeze(-1).unsqueeze(-1)
+    segment_ids = segment_ids.expand(-1, data.size(1), data.size(2))
+    result = data.new_full(result_shape, 0)  # Init empty result tensor.
+    result.scatter_add_(0, segment_ids, data)
+    return result 
 
 def unsorted_segment_mean(data, segment_ids, num_segments):
     result_shape = (num_segments, data.size(1), data.size(2))

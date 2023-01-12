@@ -6,6 +6,8 @@ import os
 from torch import nn, optim
 import json
 import time
+import wandb
+import numpy as np
 
 parser = argparse.ArgumentParser(description='VAE MNIST Example')
 parser.add_argument('--exp_name', type=str, default='exp_1', metavar='N', help='experiment_name')
@@ -88,6 +90,9 @@ def get_velocity_attr(loc, vel, rows, cols):
 
 
 def main():
+    wandb.init(config=args,
+        project="channels_egnn_nbody")
+
     dataset_train = NBodyDataset(partition='train', dataset_name=args.dataset,
                                  max_samples=args.max_training_samples)
     loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True, drop_last=True)
@@ -120,6 +125,9 @@ def main():
         raise Exception("Wrong model specified")
 
     print(model)
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    num_params = sum([np.prod(p.size()) for p in model_parameters])
+    wandb.run.summary['model_params'] = num_params
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     results = {'epochs': [], 'losess': []}
@@ -127,17 +135,23 @@ def main():
     best_test_loss = 1e8
     best_epoch = 0
     for epoch in range(0, args.epochs):
-        train(model, optimizer, epoch, loader_train)
+        train_loss = train(model, optimizer, epoch, loader_train)
+        wandb.log({'epoch': epoch, 'train/loss': train_loss})
         if epoch % args.test_interval == 0:
             #train(epoch, loader_train, backprop=False)
             val_loss = train(model, optimizer, epoch, loader_val, backprop=False)
             test_loss = train(model, optimizer, epoch, loader_test, backprop=False)
             results['epochs'].append(epoch)
             results['losess'].append(test_loss)
+
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_test_loss = test_loss
                 best_epoch = epoch
+            wandb.log({'epoch': epoch, 'val/loss': val_loss, 'test/loss': test_loss, 'val/best_loss':best_val_loss, 'test/best_loss':best_test_loss})
+            wandb.run.summary['best_val_loss'] = best_val_loss
+            wandb.run.summary['best_test_loss'] = best_test_loss
+            wandb.run.summary['best_epoch'] = best_epoch
             print("*** Best Val Loss: %.5f \t Best Test Loss: %.5f \t Best epoch %d" % (best_val_loss, best_test_loss, best_epoch))
 
         json_object = json.dumps(results, indent=4)
