@@ -28,8 +28,14 @@ parser.add_argument('--outf', type=str, default='n_body_system/logs', metavar='N
                     help='folder to output vae')
 parser.add_argument('--lr', type=float, default=5e-4, metavar='N',
                     help='learning rate')
+parser.add_argument('--nf_edge', type=int, default=64, metavar='N',
+                    help='hidden features for edge mlp and messages')
+parser.add_argument('--nf_node', type=int, default=64, metavar='N',
+                    help='hidden features for node mlp')
+parser.add_argument('--nf_coord', type=int, default=64, metavar='N',
+                    help='hidden features for coordinate mlp')
 parser.add_argument('--nf', type=int, default=64, metavar='N',
-                    help='learning rate')
+                    help='number of hidden features (not used for EGNN')
 parser.add_argument('--num_vectors', type=int, default=1, metavar='N',
                     help='number of vector channels')
 parser.add_argument('--model', type=str, default='egnn_vel', metavar='N',
@@ -107,7 +113,9 @@ def main():
     if args.model == 'gnn':
         model = GNN(input_dim=6, hidden_nf=args.nf, n_layers=args.n_layers, device=device, recurrent=True)
     elif args.model == 'egnn_vel':
-        model = EGNN_vel(in_node_nf=1, in_edge_nf=2, hidden_nf=args.nf, device=device, n_layers=args.n_layers, recurrent=True, norm_diff=args.norm_diff, tanh=args.tanh, num_vectors=args.num_vectors)
+        model = EGNN_vel(in_node_nf=1, in_edge_nf=2, hidden_edge_nf=args.nf_edge, 
+                         hidden_node_nf=args.nf_node, hidden_coord_nf=args.nf_coord,device=device, n_layers=args.n_layers,
+                         recurrent=True, norm_diff=args.norm_diff, tanh=args.tanh, num_vectors=args.num_vectors)
     elif args.model == 'baseline':
         model = Baseline()
     elif args.model == 'linear_vel':

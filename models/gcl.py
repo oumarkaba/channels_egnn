@@ -151,7 +151,7 @@ class E_GCL(nn.Module):
           temp: Softmax temperature.
     """
 
-    def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
+    def __init__(self, input_nf, output_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf,edges_in_d=0,
                 nodes_att_dim=0, act_fn=nn.ReLU(),recurrent=True, coords_weight=1.0,
                 attention=False, clamp=False, norm_diff=False, tanh=False,
                 num_vectors_in=1, num_vectors_out=1, last_layer=False):
@@ -169,22 +169,22 @@ class E_GCL(nn.Module):
 
 
         self.edge_mlp = nn.Sequential(
-            nn.Linear(input_edge + num_vectors_in + edges_in_d, hidden_nf),
+            nn.Linear(input_edge + num_vectors_in + edges_in_d, hidden_edge_nf),
             act_fn,
-            nn.Linear(hidden_nf, hidden_nf),
+            nn.Linear(hidden_edge_nf, hidden_edge_nf),
             act_fn)
 
         self.node_mlp = nn.Sequential(
-            nn.Linear(hidden_nf + input_nf + nodes_att_dim, hidden_nf),
+            nn.Linear(hidden_edge_nf + input_nf + nodes_att_dim, hidden_node_nf),
             act_fn,
-            nn.Linear(hidden_nf, output_nf))
+            nn.Linear(hidden_node_nf, output_nf))
 
-        layer = nn.Linear(hidden_nf, num_vectors_in * num_vectors_out, bias=False)
+        layer = nn.Linear(hidden_coord_nf, num_vectors_in * num_vectors_out, bias=False)
         torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
 
         self.clamp = clamp
         coord_mlp = []
-        coord_mlp.append(nn.Linear(hidden_nf, hidden_nf))
+        coord_mlp.append(nn.Linear(hidden_edge_nf, hidden_coord_nf))
         coord_mlp.append(act_fn)
         coord_mlp.append(layer)
         if self.tanh:
@@ -195,7 +195,7 @@ class E_GCL(nn.Module):
 
         if self.attention:
             self.att_mlp = nn.Sequential(
-                nn.Linear(hidden_nf, 1),
+                nn.Linear(hidden_edge_nf, 1),
                 nn.Sigmoid())
 
         #if recurrent:
@@ -278,13 +278,13 @@ class E_GCL_vel(E_GCL):
     """
 
 
-    def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0, nodes_att_dim=0, act_fn=nn.ReLU(), recurrent=True, coords_weight=1.0, attention=False, norm_diff=False, tanh=False, num_vectors_in=1, num_vectors_out=1, last_layer=False):
-        E_GCL.__init__(self, input_nf, output_nf, hidden_nf, edges_in_d=edges_in_d, nodes_att_dim=nodes_att_dim, act_fn=act_fn, recurrent=recurrent, coords_weight=coords_weight, attention=attention, norm_diff=norm_diff, tanh=tanh, num_vectors_in=num_vectors_in, num_vectors_out=num_vectors_out, last_layer=last_layer)
+    def __init__(self, input_nf, output_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf, edges_in_d=0, nodes_att_dim=0, act_fn=nn.ReLU(), recurrent=True, coords_weight=1.0, attention=False, norm_diff=False, tanh=False, num_vectors_in=1, num_vectors_out=1, last_layer=False):
+        E_GCL.__init__(self, input_nf, output_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf, edges_in_d=edges_in_d, nodes_att_dim=nodes_att_dim, act_fn=act_fn, recurrent=recurrent, coords_weight=coords_weight, attention=attention, norm_diff=norm_diff, tanh=tanh, num_vectors_in=num_vectors_in, num_vectors_out=num_vectors_out, last_layer=last_layer)
         self.norm_diff = norm_diff
         self.coord_mlp_vel = nn.Sequential(
-            nn.Linear(input_nf, hidden_nf),
+            nn.Linear(input_nf, hidden_coord_nf),
             act_fn,
-            nn.Linear(hidden_nf, num_vectors_in * num_vectors_out))
+            nn.Linear(hidden_coord_nf, num_vectors_in * num_vectors_out))
 
     def forward(self, h, edge_index, coord, vel, edge_attr=None, node_attr=None):
         row, col = edge_index

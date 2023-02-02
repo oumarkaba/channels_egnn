@@ -13,12 +13,12 @@ class E_GCL_mask(E_GCL):
           temp: Softmax temperature.
     """
 
-    def __init__(self, input_nf, output_nf, hidden_nf,
+    def __init__(self, input_nf, output_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf,
                 edges_in_d=0, nodes_attr_dim=0, act_fn=nn.ReLU(),
                 recurrent=True, coords_weight=1.0, attention=False,
                 num_vectors_in=1, num_vectors_out=1,
                 update_coords=False, last_layer=False):
-        E_GCL.__init__(self, input_nf, output_nf, hidden_nf,
+        E_GCL.__init__(self, input_nf, output_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf,
                 edges_in_d=edges_in_d, nodes_att_dim=nodes_attr_dim,
                 act_fn=act_fn, recurrent=recurrent, coords_weight=coords_weight,
                 attention=attention, num_vectors_in=num_vectors_in, num_vectors_out=num_vectors_out,
@@ -63,17 +63,19 @@ class E_GCL_mask(E_GCL):
 
 
 class EGNN(nn.Module):
-    def __init__(self, in_node_nf, in_edge_nf, hidden_nf,
+    def __init__(self, in_node_nf, in_edge_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf,
                 device='cpu', act_fn=nn.SiLU(), n_layers=4,
                 coords_weight=1.0,attention=False, node_attr=1,
                 num_vectors=1, update_coords=False):
         super(EGNN, self).__init__()
-        self.hidden_nf = hidden_nf
+        self.hidden_edge_nf = hidden_edge_nf
+        self.hidden_node_nf = hidden_node_nf
+        self.hidden_coord_nf = hidden_coord_nf
         self.device = device
         self.n_layers = n_layers
 
         ### Encoder
-        self.embedding = nn.Linear(in_node_nf, hidden_nf)
+        self.embedding = nn.Linear(in_node_nf, hidden_node_nf)
         self.node_attr = node_attr
         if node_attr:
             n_node_attr = in_node_nf
@@ -81,20 +83,23 @@ class EGNN(nn.Module):
             n_node_attr = 0
 
         self.add_module("gcl_%d" % 0,
-                E_GCL_mask(self.hidden_nf, self.hidden_nf,self.hidden_nf,
+                E_GCL_mask(self.hidden_node_nf, self.hidden_node_nf,
+                    self.hidden_edge_nf, self.hidden_node_nf, self.hidden_coord_nf,
                     edges_in_d=in_edge_nf, nodes_attr_dim=n_node_attr,
                     act_fn=act_fn, recurrent=True,
                     coords_weight=coords_weight, attention=attention,
                     num_vectors_in=1, num_vectors_out=num_vectors, update_coords=update_coords))
         for i in range(1, n_layers - 1):
             self.add_module("gcl_%d" % i,
-                E_GCL_mask(self.hidden_nf, self.hidden_nf,self.hidden_nf,
+                E_GCL_mask(self.hidden_node_nf, self.hidden_node_nf,
+                    self.hidden_edge_nf, self.hidden_node_nf, self.hidden_coord_nf,
                     edges_in_d=in_edge_nf, nodes_attr_dim=n_node_attr,
                     act_fn=act_fn, recurrent=True,
                     coords_weight=coords_weight, attention=attention,
                     num_vectors_in=num_vectors, num_vectors_out=num_vectors, update_coords=update_coords))
         self.add_module("gcl_%d" %  (n_layers - 1),
-            E_GCL_mask(self.hidden_nf, self.hidden_nf,self.hidden_nf,
+            E_GCL_mask(self.hidden_node_nf, self.hidden_node_nf,
+                self.hidden_edge_nf, self.hidden_node_nf, self.hidden_coord_nf,
                 edges_in_d=in_edge_nf, nodes_attr_dim=n_node_attr,
                 act_fn=act_fn, recurrent=True,
                 coords_weight=coords_weight, attention=attention,
@@ -102,13 +107,13 @@ class EGNN(nn.Module):
                 update_coords=update_coords, last_layer=True))
 
 
-        self.node_dec = nn.Sequential(nn.Linear(self.hidden_nf, self.hidden_nf),
+        self.node_dec = nn.Sequential(nn.Linear(self.hidden_node_nf, self.hidden_node_nf),
                                       act_fn,
-                                      nn.Linear(self.hidden_nf, self.hidden_nf))
+                                      nn.Linear(self.hidden_node_nf, self.hidden_node_nf))
 
-        self.graph_dec = nn.Sequential(nn.Linear(self.hidden_nf, self.hidden_nf),
+        self.graph_dec = nn.Sequential(nn.Linear(self.hidden_node_nf, self.hidden_node_nf),
                                        act_fn,
-                                       nn.Linear(self.hidden_nf, 1))
+                                       nn.Linear(self.hidden_node_nf, 1))
         self.to(self.device)
 
     def forward(self, h0, x, edges, edge_attr, node_mask, edge_mask, n_nodes):
@@ -122,7 +127,7 @@ class EGNN(nn.Module):
 
         h = self.node_dec(h)
         h = h * node_mask
-        h = h.view(-1, n_nodes, self.hidden_nf)
+        h = h.view(-1, n_nodes, self.hidden_node_nf)
         h = torch.sum(h, dim=1)
         pred = self.graph_dec(h)
         return pred.squeeze(1)
