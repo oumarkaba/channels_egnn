@@ -85,11 +85,19 @@ class EGNN_vel(nn.Module):
         self.to(self.device)
 
 
-    def forward(self, h, x, edges, vel, edge_attr):
+    def forward(self, h, x, edges, vel, edge_attr, use_traj=False):
         h = self.embedding(h)
+        if use_traj:
+            x_traj = [x.clone()]
         for i in range(0, self.n_layers):
             h, x, _ = self._modules["gcl_%d" % i](h, edges, x, vel, edge_attr=edge_attr)
-        return x.squeeze(2)
+            if use_traj:
+                x_traj.append(x.clone())
+        if use_traj:
+            return x.squeeze(2), x_traj
+        else:
+            return x.squeeze(2)
+
 
 class RF_vel(nn.Module):
     def __init__(self, hidden_nf, edge_attr_nf=0, device='cpu', act_fn=nn.SiLU(), n_layers=4):

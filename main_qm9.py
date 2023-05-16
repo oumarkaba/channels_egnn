@@ -67,8 +67,10 @@ wandb.init(config=args,
 
 # compute mean and mean absolute deviation
 meann, mad = qm9_utils.compute_mean_mad(dataloaders, args.property)
+wandb.run.summary['property_mean'] = meann
+wandb.run.summary['property_mad'] = mad
 
-model = EGNN(in_node_nf=15, in_edge_nf=0, hidden_nf=args.nf, device=device, n_layers=args.n_layers, coords_weight=1.0,
+model = EGNN(in_node_nf=15, in_edge_nf=0, hidden_edge_nf=args.nf, hidden_node_nf=args.nf, hidden_coord_nf=args.nf, device=device, n_layers=args.n_layers, coords_weight=1.0,
              attention=args.attention, node_attr=args.node_attr,
              num_vectors=args.num_vectors, update_coords=args.update_coords)
 
