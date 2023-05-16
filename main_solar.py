@@ -49,8 +49,6 @@ parser.add_argument('--attention', type=int, default=0, metavar='N',
                     help='attention in the ae model')
 parser.add_argument('--n_layers', type=int, default=4, metavar='N',
                     help='number of layers for the autoencoder')
-parser.add_argument('--degree', type=int, default=2, metavar='N',
-                    help='degree of the TFN and SE3')
 parser.add_argument('--weight_decay', type=float, default=1e-7, metavar='N',
                     help='weight decay')
 parser.add_argument('--norm_diff', type=eval, default=False, metavar='N',
@@ -129,19 +127,11 @@ def main():
     best_test_loss = 1e8
     best_epoch = 0
 
-
-
-
-    losses = []
-    batch_losses = []
-    baseline_losses = []
-    batch_baseline_losses = []
-
     baseline_model = BaselineModel(vel_mult=10).to(device)
     baseline_train_loss = train(baseline_model, optimizer, 0, loader_train, backprop=False)
     baseline_val_loss = train(baseline_model, optimizer, 0, loader_val, backprop=False)
     wandb.run.summary['train/baseline_loss'] = baseline_train_loss
-    wandb.run.summary['train/baseline_loss'] = baseline_val_loss
+    wandb.run.summary['val/baseline_loss'] = baseline_val_loss
 
     for epoch in range(0, args.epochs):
         train_loss = train(model, optimizer, epoch, loader_train)
