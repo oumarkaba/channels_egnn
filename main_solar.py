@@ -16,7 +16,7 @@ sys.modules['base_classes'] = base_classes
 #from tqdm import tqdm
 from tqdm import  tqdm
 
-parser = argparse.ArgumentParser(description='VAE MNIST Example')
+parser = argparse.ArgumentParser(description='')
 parser.add_argument('--exp_name', type=str, default='exp_1', metavar='N', help='experiment_name')
 parser.add_argument('--batch_size', type=int, default=100, metavar='N',
                     help='input batch size for training (default: 128)')
@@ -55,6 +55,12 @@ parser.add_argument('--norm_diff', type=eval, default=False, metavar='N',
                     help='normalize_diff')
 parser.add_argument('--tanh', type=eval, default=False, metavar='N',
                     help='use tanh')
+parser.add_argument('--checkpoint', action='store_true', default=False,
+                    help='enables checkpoint saving of model')
+parser.add_argument('--timestep_pred', type=int, default=1000, metavar='N')
+parser.add_argument('--early_stopping', type=int, default=100, metavar='N')
+
+parser.add_argument('--gradient_clip', type=float, default=0.0, metavar='N')
 
 time_exp_dic = {'time': 0, 'counter': 0}
 
@@ -62,13 +68,14 @@ time_exp_dic = {'time': 0, 'counter': 0}
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
+torch.manual_seed(args.seed)
 
 time_exp_dic = {'time': 0, 'counter': 0}
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def weighted_mse_loss(pred, true, original):
-    mse = torch.sum((pred - true)**2, 1)
-    weight = 1/torch.sum((original - true)**2, 1)
+    mse = torch.sum((pred - true)**2, -1)
+    weight = 1/torch.sum((original - true)**2, -1)
     return torch.mean(mse*weight)
     
 
@@ -99,10 +106,10 @@ def main():
         project="channels_egnn_solar")
 
 
-    dataset_train = SolarSystemDataset(partition='train', timestep_pred=1000)
-    dataset_val = SolarSystemDataset(partition='val', timestep_pred=1000)
+    dataset_train = SolarSystemDataset(partition='train', timestep_pred=args.timestep_pred)
+    dataset_val = SolarSystemDataset(partition='val', timestep_pred=args.timestep_pred)
     loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True, drop_last=False)
-    loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, drop_last=True)
+    loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, drop_last=False)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     #model = EGNN_vel(in_node_nf=2, in_edge_nf=1, hidden_edge_nf=64,
     #                hidden_node_nf=64,   hidden_coord_nf=64, 
@@ -127,7 +134,7 @@ def main():
     best_test_loss = 1e8
     best_epoch = 0
 
-    baseline_model = BaselineModel(vel_mult=10).to(device)
+    baseline_model = BaselineModel(vel_mult=0.0135*args.timestep_pred).to(device)
     baseline_train_loss = train(baseline_model, optimizer, 0, loader_train, backprop=False)
     baseline_val_loss = train(baseline_model, optimizer, 0, loader_val, backprop=False)
     wandb.run.summary['train/baseline_loss'] = baseline_train_loss
@@ -142,12 +149,15 @@ def main():
             #test_loss = train(model, optimizer, epoch, loader_test, backprop=False)
             results['epochs'].append(epoch)
             #results['losses'].append(test_loss)
-
+            wandb.log({'epoch': epoch, 'val/loss': val_loss, 'val/best_loss':best_val_loss})#, 'test/best_loss':best_test_loss})
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 #best_test_loss = test_loss
                 best_epoch = epoch
-            wandb.log({'epoch': epoch, 'val/loss': val_loss, 'val/best_loss':best_val_loss})#, 'test/best_loss':best_test_loss})
+                if args.checkpoint:
+                    torch.save(model.state_dict(), os.path.join(wandb.run.dir, 'best_model.pt'))
+            elif epoch - best_epoch > args.early_stopping:
+                break
             wandb.run.summary['best_val_loss'] = best_val_loss
             #wandb.run.summary['best_test_loss'] = best_test_loss
             wandb.run.summary['best_epoch'] = best_epoch
@@ -174,6 +184,8 @@ def train(model, optimizer, epoch, loader, backprop=True):
         
         loss = weighted_mse_loss(loc_pred, loc_end, loc)
         if backprop:
+            if args.gradient_clip > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clip)
             loss.backward()
             optimizer.step()
         res['loss'] += loss.item()*batch_size
