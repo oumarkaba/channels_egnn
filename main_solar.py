@@ -58,9 +58,12 @@ parser.add_argument('--tanh', type=eval, default=False, metavar='N',
 parser.add_argument('--checkpoint', action='store_true', default=False,
                     help='enables checkpoint saving of model')
 parser.add_argument('--timestep_pred', type=int, default=1000, metavar='N')
-parser.add_argument('--early_stopping', type=int, default=100, metavar='N')
-
+parser.add_argument('--early_stopping', type=int, default=1000, metavar='N')
+parser.add_argument('--mass_fcn', type=str, default='log', metavar='N')
 parser.add_argument('--gradient_clip', type=float, default=0.0, metavar='N')
+parser.add_argument('--train_timesteps', type=int, default=14016, metavar='N')
+parser.add_argument('--val_timesteps', type=int, default=1752, metavar='N')
+parser.add_argument('--test_timesteps', type=int, default=1752, metavar='N')
 
 time_exp_dic = {'time': 0, 'counter': 0}
 
@@ -87,7 +90,12 @@ def process_data(data, edges):
         edges = [edges[0].to(device), edges[1].to(device)]
 
         vel_feat = torch.sqrt(torch.sum(vel ** 2, dim=1)).unsqueeze(1).detach()
-        mass_feat = torch.log(mass).detach()
+        if args.mass_fcn == 'sqrt':
+            mass_feat = (torch.sqrt(mass)  - torch.mean(torch.sqrt(mass))).detach()
+        elif args.mass_fcn == 'log':
+            mass_feat = (torch.log(mass) - torch.mean(torch.log(mass))).detach()
+        else:
+            mass_feat = torch.log(mass).detach()
         nodes = torch.cat([vel_feat, mass_feat], dim=1).to(device)
         rows, cols = edges
         edge_attr = torch.sum((loc[rows] - loc[cols])**2, 1).unsqueeze(1).to(device)
@@ -106,8 +114,10 @@ def main():
         project="channels_egnn_solar")
 
 
-    dataset_train = SolarSystemDataset(partition='train', timestep_pred=args.timestep_pred)
-    dataset_val = SolarSystemDataset(partition='val', timestep_pred=args.timestep_pred)
+    dataset_train = SolarSystemDataset(partition='train', train_timesteps=args.train_timesteps, val_timesteps=args.val_timesteps,
+                                       test_timesteps=args.test_timesteps,  timestep_pred=args.timestep_pred)
+    dataset_val = SolarSystemDataset(partition='val', train_timesteps=args.train_timesteps, val_timesteps=args.val_timesteps,
+                                       test_timesteps=args.test_timesteps,  timestep_pred=args.timestep_pred)
     loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True, drop_last=False)
     loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, drop_last=False)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -184,9 +194,9 @@ def train(model, optimizer, epoch, loader, backprop=True):
         
         loss = weighted_mse_loss(loc_pred, loc_end, loc)
         if backprop:
+            loss.backward()
             if args.gradient_clip > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clip)
-            loss.backward()
             optimizer.step()
         res['loss'] += loss.item()*batch_size
         res['counter'] += batch_size
