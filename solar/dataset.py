@@ -3,14 +3,14 @@ import numpy as np
 import pickle
 
 class SolarSystemDataset(torch.utils.data.Dataset):
-    def __init__(self, partition='train', timestep_pred=1000):
+    def __init__(self, partition='train',  train_timesteps=14016, val_timesteps=1752, test_timesteps=1752, timestep_pred=1000):
         self.partition = partition
         solar_system = pickle.load(open('solar/data/solar_system_data.pkl', 'rb'))
         tot_timesteps = solar_system.get_positions().shape[0]
-        self.train_timesteps = 14016 # 0.8 year of data
-        self.val_timesteps = 1752 # 0.1 year of data
-        self.test_timesteps = 1752 # 0.1 year of data
-        self.timestep_pred = 1000 # Predict 1000 timesteps into the future
+        self.train_timesteps = train_timesteps # 0.8 year of data
+        self.val_timesteps = val_timesteps # 0.1 year of data
+        self.test_timesteps = test_timesteps # 0.1 year of data
+        self.timestep_pred = timestep_pred # Predict 1000 timesteps into the future
         all_positions = solar_system.get_positions()
         all_velocities = solar_system.get_velocities()
         if self.partition == 'train':
@@ -29,9 +29,9 @@ class SolarSystemDataset(torch.utils.data.Dataset):
         self.n_bodies = self.pos.shape[1]
         self.masses = solar_system.get_masses()
         self.edges = self.get_complete_edges(self.n_bodies)
-        self.init_pos = self.pos[:-timestep_pred]
-        self.final_pos = self.pos[timestep_pred:]
-        self.init_vel = self.vel[:-timestep_pred]
+        self.init_pos = self.pos[:-self.timestep_pred]
+        self.final_pos = self.pos[self.timestep_pred:]
+        self.init_vel = self.vel[:-self.timestep_pred]
 
     def __getitem__(self, i):
         return self.init_pos[i], self.init_vel[i], self.masses[..., np.newaxis], self.final_pos[i]
