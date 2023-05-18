@@ -19,7 +19,7 @@ class SolarSystemDataset(torch.utils.data.Dataset):
         elif self.partition == 'val':
             start_t = self.train_timesteps
             end_t = self.train_timesteps + self.val_timesteps
-        elif self.parition == 'test':
+        elif self.partition == 'test':
             start_t = self.train_timesteps + self.val_timesteps
             end_t = self.train_timesteps + self.val_timesteps + self.test_timesteps
         else:

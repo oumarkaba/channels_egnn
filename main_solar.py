@@ -39,8 +39,8 @@ parser.add_argument('--nf_node', type=int, default=64, metavar='N',
                     help='hidden features for node mlp')
 parser.add_argument('--nf_coord', type=int, default=64, metavar='N',
                     help='hidden features for coordinate mlp')
-parser.add_argument('--nf', type=int, default=64, metavar='N',
-                    help='number of hidden features (not used for EGNN')
+parser.add_argument('--nf', type=int, default=0, metavar='N',
+                    help='if not 0, overrides nf_edge, nf_node, and nf_coord')
 parser.add_argument('--num_vectors', type=int, default=1, metavar='N',
                     help='number of vector channels')
 parser.add_argument('--model', type=str, default='egnn_vel', metavar='N',
@@ -51,26 +51,30 @@ parser.add_argument('--n_layers', type=int, default=4, metavar='N',
                     help='number of layers for the autoencoder')
 parser.add_argument('--weight_decay', type=float, default=1e-7, metavar='N',
                     help='weight decay')
-parser.add_argument('--norm_diff', type=eval, default=False, metavar='N',
+parser.add_argument('--norm_diff', type=eval, default=True, metavar='N',
                     help='normalize_diff')
 parser.add_argument('--tanh', type=eval, default=False, metavar='N',
                     help='use tanh')
 parser.add_argument('--checkpoint', action='store_true', default=False,
                     help='enables checkpoint saving of model')
 parser.add_argument('--timestep_pred', type=int, default=1000, metavar='N')
-parser.add_argument('--early_stopping', type=int, default=1000, metavar='N')
+parser.add_argument('--early_stopping', type=int, default=500, metavar='N')
 parser.add_argument('--mass_fcn', type=str, default='log', metavar='N')
 parser.add_argument('--gradient_clip', type=float, default=0.0, metavar='N')
 parser.add_argument('--train_timesteps', type=int, default=14016, metavar='N')
 parser.add_argument('--val_timesteps', type=int, default=1752, metavar='N')
 parser.add_argument('--test_timesteps', type=int, default=1752, metavar='N')
+parser.add_argument('--eval_test', type=eval, default=False, metavar='N')
 
 time_exp_dic = {'time': 0, 'counter': 0}
 
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
-
+if args.nf != 0:
+    args.nf_edge = args.nf
+    args.nf_node = args.nf
+    args.nf_coord = args.nf
 torch.manual_seed(args.seed)
 
 time_exp_dic = {'time': 0, 'counter': 0}
@@ -118,8 +122,11 @@ def main():
                                        test_timesteps=args.test_timesteps,  timestep_pred=args.timestep_pred)
     dataset_val = SolarSystemDataset(partition='val', train_timesteps=args.train_timesteps, val_timesteps=args.val_timesteps,
                                        test_timesteps=args.test_timesteps,  timestep_pred=args.timestep_pred)
+    dataset_test = SolarSystemDataset(partition='test', train_timesteps=args.train_timesteps, val_timesteps=args.val_timesteps,
+                                       test_timesteps=args.test_timesteps,  timestep_pred=args.timestep_pred)
     loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True, drop_last=False)
     loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, drop_last=False)
+    loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=args.batch_size, shuffle=False, drop_last=False)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     #model = EGNN_vel(in_node_nf=2, in_edge_nf=1, hidden_edge_nf=64,
     #                hidden_node_nf=64,   hidden_coord_nf=64, 
@@ -141,7 +148,7 @@ def main():
 
     results = {'epochs': [], 'losses': []}
     best_val_loss = 1e8
-    best_test_loss = 1e8
+    best_test_loss = None
     best_epoch = 0
 
     baseline_model = BaselineModel(vel_mult=0.0135*args.timestep_pred).to(device)
@@ -154,22 +161,26 @@ def main():
         train_loss = train(model, optimizer, epoch, loader_train)
         wandb.log({'epoch': epoch, 'train/loss': train_loss})
         if epoch % args.test_interval == 0:
-            #train(epoch, loader_train, backprop=False)
             val_loss = train(model, optimizer, epoch, loader_val, backprop=False)
-            #test_loss = train(model, optimizer, epoch, loader_test, backprop=False)
+            if args.eval_test:
+                test_loss = train(model, optimizer, epoch, loader_test, backprop=False)
+            else:
+                test_loss = None
             results['epochs'].append(epoch)
             #results['losses'].append(test_loss)
-            wandb.log({'epoch': epoch, 'val/loss': val_loss, 'val/best_loss':best_val_loss})#, 'test/best_loss':best_test_loss})
+            wandb.log({'epoch': epoch, 'val/loss': val_loss, 'val/best_loss':best_val_loss,
+                       'test/loss': test_loss,'test/best_loss':best_test_loss})
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                #best_test_loss = test_loss
+                if args.eval_test:
+                    best_test_loss = test_loss
                 best_epoch = epoch
                 if args.checkpoint:
                     torch.save(model.state_dict(), os.path.join(wandb.run.dir, 'best_model.pt'))
             elif epoch - best_epoch > args.early_stopping:
                 break
             wandb.run.summary['best_val_loss'] = best_val_loss
-            #wandb.run.summary['best_test_loss'] = best_test_loss
+            wandb.run.summary['best_test_loss'] = best_test_loss
             wandb.run.summary['best_epoch'] = best_epoch
             print("*** Best Val Loss: %.5f \t Best Test Loss: %.5f \t Best epoch %d" % (best_val_loss, best_test_loss, best_epoch))
 
