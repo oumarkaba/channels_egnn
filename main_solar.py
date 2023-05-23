@@ -148,7 +148,7 @@ def main():
 
     results = {'epochs': [], 'losses': []}
     best_val_loss = 1e8
-    best_test_loss = None
+    best_test_loss = 1e8
     best_epoch = 0
 
     baseline_model = BaselineModel(vel_mult=0.0135*args.timestep_pred).to(device)
@@ -165,7 +165,7 @@ def main():
             if args.eval_test:
                 test_loss = train(model, optimizer, epoch, loader_test, backprop=False)
             else:
-                test_loss = None
+                test_loss = 1e8
             results['epochs'].append(epoch)
             #results['losses'].append(test_loss)
             wandb.log({'epoch': epoch, 'val/loss': val_loss, 'val/best_loss':best_val_loss,
