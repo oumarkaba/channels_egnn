@@ -65,6 +65,9 @@ parser.add_argument('--train_timesteps', type=int, default=14016, metavar='N')
 parser.add_argument('--val_timesteps', type=int, default=1752, metavar='N')
 parser.add_argument('--test_timesteps', type=int, default=1752, metavar='N')
 parser.add_argument('--eval_test', type=eval, default=False, metavar='N')
+parser.add_argument('--update_vel', type=eval, default=False, metavar='N',
+                    help='update velocity at each step')
+
 
 time_exp_dic = {'time': 0, 'counter': 0}
 
@@ -137,7 +140,7 @@ def main():
 
     model = EGNN_vel(in_node_nf=2, in_edge_nf=1, hidden_edge_nf=args.nf_edge, 
                         hidden_node_nf=args.nf_node, hidden_coord_nf=args.nf_coord, device=device, n_layers=args.n_layers,
-                        recurrent=True, norm_diff=args.norm_diff, tanh=args.tanh, num_vectors=args.num_vectors)
+                        recurrent=True, norm_diff=args.norm_diff, tanh=args.tanh, num_vectors=args.num_vectors, update_vel=args.update_vel)
     model = model.to(device)
     print(model)
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())

@@ -3,13 +3,16 @@ from torch.nn import functional as F
 from models.gcl import GCL, E_GCL, E_GCL_vel, GCL_rf_vel
 
 class EGNN_vel(nn.Module):
-    def __init__(self, in_node_nf, in_edge_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf, device='cpu', act_fn=nn.SiLU(), n_layers=4, coords_weight=1.0, recurrent=False, norm_diff=False, tanh=False, num_vectors=1):
+    def __init__(self, in_node_nf, in_edge_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf,
+                 device='cpu', act_fn=nn.SiLU(), n_layers=4, coords_weight=1.0, recurrent=False,
+                 norm_diff=False, tanh=False, num_vectors=1, update_vel=False):
         super(EGNN_vel, self).__init__()
         self.hidden_edge_nf = hidden_edge_nf
         self.hidden_node_nf = hidden_node_nf
         self.hidden_coord_nf = hidden_coord_nf
         self.device = device
         self.n_layers = n_layers
+        self.update_vel = update_vel
         #self.reg = reg
         ### Encoder
         #self.add_module("gcl_0", E_GCL(in_node_nf, self.hidden_nf, self.hidden_nf, edges_in_d=in_edge_nf, act_fn=act_fn, recurrent=False, coords_weight=coords_weight))
@@ -26,9 +29,11 @@ class EGNN_vel(nn.Module):
         if use_traj:
             x_traj = [x.clone()]
         for i in range(0, self.n_layers):
-            h, x, _ = self._modules["gcl_%d" % i](h, edges, x, vel, edge_attr=edge_attr)
+            h, x, _, vel_new = self._modules["gcl_%d" % i](h, edges, x, vel, edge_attr=edge_attr)
             if use_traj:
                 x_traj.append(x.clone())
+            if self.update_vel:
+                vel = vel_new
         if use_traj:
             return x.squeeze(2), x_traj
         else:

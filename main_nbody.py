@@ -62,6 +62,8 @@ parser.add_argument('--norm_diff', type=eval, default=False, metavar='N',
                     help='normalize_diff')
 parser.add_argument('--tanh', type=eval, default=False, metavar='N',
                     help='use tanh')
+parser.add_argument('--update_vel', type=eval, default=False, metavar='N',
+                    help='update velocity at each step')
 
 time_exp_dic = {'time': 0, 'counter': 0}
 
@@ -115,7 +117,7 @@ def main():
     elif args.model == 'egnn_vel':
         model = EGNN_vel(in_node_nf=1, in_edge_nf=2, hidden_edge_nf=args.nf_edge, 
                          hidden_node_nf=args.nf_node, hidden_coord_nf=args.nf_coord,device=device, n_layers=args.n_layers,
-                         recurrent=True, norm_diff=args.norm_diff, tanh=args.tanh, num_vectors=args.num_vectors)
+                         recurrent=True, norm_diff=args.norm_diff, tanh=args.tanh, num_vectors=args.num_vectors, update_vel=args.update_vel)
     elif args.model == 'baseline':
         model = Baseline()
     elif args.model == 'linear_vel':

@@ -278,8 +278,13 @@ class E_GCL_vel(E_GCL):
     """
 
 
-    def __init__(self, input_nf, output_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf, edges_in_d=0, nodes_att_dim=0, act_fn=nn.ReLU(), recurrent=True, coords_weight=1.0, attention=False, norm_diff=False, tanh=False, num_vectors_in=1, num_vectors_out=1, last_layer=False):
-        E_GCL.__init__(self, input_nf, output_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf, edges_in_d=edges_in_d, nodes_att_dim=nodes_att_dim, act_fn=act_fn, recurrent=recurrent, coords_weight=coords_weight, attention=attention, norm_diff=norm_diff, tanh=tanh, num_vectors_in=num_vectors_in, num_vectors_out=num_vectors_out, last_layer=last_layer)
+    def __init__(self, input_nf, output_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf,
+                 edges_in_d=0, nodes_att_dim=0, act_fn=nn.ReLU(), recurrent=True, coords_weight=1.0,
+                 attention=False, norm_diff=False, tanh=False, num_vectors_in=1, num_vectors_out=1, last_layer=False):
+        E_GCL.__init__(self, input_nf, output_nf, hidden_edge_nf, hidden_node_nf, hidden_coord_nf,
+                       edges_in_d=edges_in_d, nodes_att_dim=nodes_att_dim, act_fn=act_fn, recurrent=recurrent,
+                       coords_weight=coords_weight, attention=attention, norm_diff=norm_diff, tanh=tanh,
+                       num_vectors_in=num_vectors_in, num_vectors_out=num_vectors_out, last_layer=last_layer)
         self.norm_diff = norm_diff
         self.coord_mlp_vel = nn.Sequential(
             nn.Linear(input_nf, hidden_coord_nf),
@@ -300,7 +305,7 @@ class E_GCL_vel(E_GCL):
         h, agg = self.node_model(h, edge_index, edge_feat, node_attr)
         # coord = self.node_coord_model(h, coord)
         # x = self.node_model(x, edge_index, x[col], u, batch)  # GCN
-        return h, coord, edge_attr
+        return h, coord, edge_attr, vel
  
 
 class GCL_rf_vel(nn.Module):
